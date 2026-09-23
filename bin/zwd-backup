@@ -1,0 +1,66 @@
+#!/bin/bash
+# Back up the WebDAV folder to OneDrive (or any rclone destination).
+#
+# Layout at BACKUP_DEST:
+#   current/                        mirror of DATA_DIR as of the last run
+#   versions/YYYY-MM-DD_HHMMSS/     files that run changed or deleted, as they were before
+#   last-backup.txt                 timestamp and result of the last run
+#
+# Version folders older than BACKUP_KEEP_DAYS are pruned.
+# launchd runs this nightly via the io.github.stevehaigh.zotero-webdav-backup LaunchAgent.
+set -euo pipefail
+# shellcheck source=../lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
+load_config
+
+[[ -n "$BACKUP_DEST" ]] || { log "BACKUP_DEST is empty; backup disabled."; exit 0; }
+[[ -d "$DATA_DIR/zotero" ]] || die "Nothing to back up: $DATA_DIR/zotero does not exist."
+
+# For a local path, the cloud folder it lives in must already exist. We create
+# the backup folders inside it but never the cloud root itself: if OneDrive is
+# signed out, writing there would silently "back up" to the Mac's own disk.
+if [[ "$BACKUP_DEST" == /* ]]; then
+  if [[ "$BACKUP_DEST" =~ ^(.*/Library/CloudStorage/[^/]+) ]]; then
+    root="${BASH_REMATCH[1]}"          # e.g. ~/Library/CloudStorage/OneDrive-Personal
+  else
+    root="$(dirname "$BACKUP_DEST")"   # any other local folder: its parent must exist
+  fi
+  [[ -d "$root" ]] || die "Backup location $root does not exist. Is OneDrive running and signed in?"
+  mkdir -p "$BACKUP_DEST"
+fi
+
+stamp="$(date '+%Y-%m-%d_%H%M%S')"
+status_file="$(mktemp)"
+trap 'rm -f "$status_file"' EXIT
+
+log "Backing up $DATA_DIR -> $BACKUP_DEST/current"
+if "$RCLONE_BIN" sync "$DATA_DIR" "$BACKUP_DEST/current" \
+     --backup-dir "$BACKUP_DEST/versions/$stamp" \
+     --log-level "${LOG_LEVEL}" --stats-one-line --stats 0; then
+  result="OK"
+else
+  result="FAILED (rclone exit $?)"
+fi
+
+# Prune version folders by the date in their name. (Using file ages would be
+# wrong: files keep their original modification times when moved aside.)
+if is_macos; then
+  cutoff="$(date -v-"${BACKUP_KEEP_DAYS}"d '+%Y-%m-%d')"
+else
+  cutoff="$(date -d "${BACKUP_KEEP_DAYS} days ago" '+%Y-%m-%d')"
+fi
+while IFS= read -r dir; do
+  dir="${dir%/}"
+  [[ "$dir" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}_ ]] || continue
+  if [[ "${dir:0:10}" < "$cutoff" ]]; then
+    log "Pruning old version folder $dir"
+    "$RCLONE_BIN" purge "$BACKUP_DEST/versions/$dir" --log-level ERROR || warn "Could not prune $dir"
+  fi
+done < <("$RCLONE_BIN" lsf --dirs-only "$BACKUP_DEST/versions" 2>/dev/null || true)
+
+printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$result" > "$status_file"
+"$RCLONE_BIN" copyto "$status_file" "$BACKUP_DEST/last-backup.txt" --log-level ERROR || true
+cp "$status_file" "$ZWD_CONFIG_DIR/last-backup.txt" 2>/dev/null || true
+
+log "Backup $result"
+[[ "$result" == "OK" ]]

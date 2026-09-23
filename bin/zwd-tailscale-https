@@ -1,0 +1,42 @@
+#!/bin/bash
+# Publish the WebDAV server on your tailnet over HTTPS using `tailscale serve`.
+#
+# Tailscale terminates TLS with a real certificate for <machine>.<tailnet>.ts.net
+# and forwards to rclone on localhost. Afterwards you can set BIND_ADDR=127.0.0.1
+# in config.env so the server is no longer reachable on your LAN at all.
+#
+#   zwd-tailscale-https          enable
+#   zwd-tailscale-https --off    disable
+set -euo pipefail
+# shellcheck source=../lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
+load_config
+
+ts="$(find_tailscale)" || die "Tailscale CLI not found. Install Tailscale first (see docs/tailscale.md)."
+
+if [[ "${1:-}" == "--off" ]]; then
+  "$ts" serve --https=443 off
+  info "Tailscale HTTPS serving disabled."
+  exit 0
+fi
+
+info "Enabling: https://<this-mac>.ts.net -> http://127.0.0.1:$PORT"
+"$ts" serve --bg --https=443 "http://127.0.0.1:${PORT}"
+
+name="$(tailscale_dns_name || true)"
+echo
+if [[ -n "$name" ]]; then
+  info "Zotero WebDAV URL: https://$name"
+  echo "   Enter it in Zotero as: scheme https, URL $name"
+else
+  warn "Could not read the MagicDNS name. Run '$ts serve status' to see it."
+fi
+cat <<EOF
+
+If this failed with a certificate error, enable MagicDNS and HTTPS Certificates
+in the Tailscale admin console (DNS page), then run this again.
+
+Optional hardening: set BIND_ADDR="127.0.0.1" in $ZWD_CONFIG and run
+  sudo launchctl kickstart -k system/$ZWD_SERVER_LABEL
+so only Tailscale (not your LAN) can reach the server.
+EOF

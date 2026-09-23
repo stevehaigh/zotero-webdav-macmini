@@ -1,0 +1,20 @@
+#!/bin/bash
+# Run the Zotero WebDAV server in the foreground.
+# launchd starts this via the io.github.stevehaigh.zotero-webdav LaunchDaemon;
+# you can also run it by hand to debug.
+set -euo pipefail
+# shellcheck source=../lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
+load_config
+
+[[ -s "$HTPASSWD_FILE" ]] || die "No credentials at $HTPASSWD_FILE. Run zwd-set-password first."
+
+# Zotero appends /zotero/ to whatever URL you give it, so that folder must exist.
+mkdir -p "$DATA_DIR/zotero"
+
+log "Serving $DATA_DIR on ${BIND_ADDR:-*}:$PORT"
+exec "$RCLONE_BIN" serve webdav "$DATA_DIR" \
+  --addr "${BIND_ADDR}:${PORT}" \
+  --htpasswd "$HTPASSWD_FILE" \
+  --realm "Zotero" \
+  --log-level "$LOG_LEVEL"

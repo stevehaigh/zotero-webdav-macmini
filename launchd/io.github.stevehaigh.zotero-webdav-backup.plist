@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LaunchAgent: runs the OneDrive backup once a day in your login session.
+  It is an agent (not a daemon) because the OneDrive app only syncs while you
+  are logged in. If the Mac was asleep at the scheduled time, launchd runs the
+  job when it wakes.
+  install.sh fills in the __PLACEHOLDERS__ and copies this to ~/Library/LaunchAgents.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>io.github.stevehaigh.zotero-webdav-backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__PREFIX__/bin/zwd-backup</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>__BACKUP_HOUR__</integer>
+    <key>Minute</key>
+    <integer>__BACKUP_MINUTE__</integer>
+  </dict>
+
+  <key>LowPriorityIO</key>
+  <true/>
+  <key>Nice</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>__LOG_DIR__/backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG_DIR__/backup.log</string>
+</dict>
+</plist>

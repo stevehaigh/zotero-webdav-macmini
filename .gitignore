@@ -1,0 +1,5 @@
+# Never commit real credentials or local config
+htpasswd
+config.env
+*.log
+.DS_Store

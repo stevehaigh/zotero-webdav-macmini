@@ -1,0 +1,99 @@
+#!/bin/bash
+# Check that the Zotero WebDAV server is healthy.
+#   zwd-healthcheck          quick check: services loaded, port answering, last backup
+#   zwd-healthcheck --auth   also log in and write, read and delete a test file
+#                            (prompts for the password, or reads ZWD_PASSWORD)
+#   zwd-healthcheck --url https://mini.tailnet.ts.net
+#                            test a different base URL (e.g. the Tailscale HTTPS one)
+set -uo pipefail
+# shellcheck source=../lib/common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
+load_config
+
+auth=0
+base_url="http://127.0.0.1:${PORT}"
+while (( $# )); do
+  case "$1" in
+    --auth) auth=1 ;;
+    --url)  base_url="${2%/}"; shift ;;
+    -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
+    *) die "Unknown option $1" ;;
+  esac
+  shift
+done
+
+fail=0
+ok()  { printf '  \033[32m✔\033[0m %s\n' "$*"; }
+bad() { printf '  \033[31m✘\033[0m %s\n' "$*"; fail=1; }
+
+echo "Zotero WebDAV health check"
+
+if is_macos; then
+  if launchctl print "system/$ZWD_SERVER_LABEL" >/dev/null 2>&1; then
+    ok "Server LaunchDaemon loaded ($ZWD_SERVER_LABEL)"
+  else
+    bad "Server LaunchDaemon not loaded. Re-run install.sh."
+  fi
+  if launchctl print "gui/$(id -u)/$ZWD_BACKUP_LABEL" >/dev/null 2>&1; then
+    ok "Backup LaunchAgent loaded ($ZWD_BACKUP_LABEL)"
+  elif [[ -n "$BACKUP_DEST" ]]; then
+    bad "Backup LaunchAgent not loaded (it only loads while you are logged in)"
+  fi
+fi
+
+# An unauthenticated PROPFIND should get 401: proves the server is up and auth is on.
+code="$(curl -s -o /dev/null -w '%{http_code}' -X PROPFIND -H 'Depth: 0' "$base_url/zotero/" --max-time 10)"
+case "$code" in
+  401) ok "Server answering at $base_url and requiring a password" ;;
+  000) bad "No answer from $base_url (server down, wrong port, or firewall)" ;;
+  *)   bad "Unexpected HTTP $code from $base_url without a password (expected 401)" ;;
+esac
+
+if (( auth )); then
+  user="$(cut -d: -f1 "$HTPASSWD_FILE" | head -n 1)"
+  pw="${ZWD_PASSWORD:-}"
+  [[ -n "$pw" ]] || { read -r -s -p "  Password for '$user': " pw; echo; }
+  # Pass credentials via a private curl config file so they never appear in `ps`.
+  pw_esc="${pw//\\/\\\\}"; pw_esc="${pw_esc//\"/\\\"}"
+  creds="$(umask 077; mktemp)"
+  trap 'rm -f "$creds"' EXIT
+  printf 'user = "%s:%s"\n' "$user" "$pw_esc" > "$creds"
+  unset pw pw_esc
+  probe="$base_url/zotero/.zwd-healthcheck-$$.txt"
+  c() { curl -s -K "$creds" --max-time 20 "$@"; }
+
+  code="$(c -o /dev/null -w '%{http_code}' -X PROPFIND -H 'Depth: 1' "$base_url/zotero/")"
+  if [[ "$code" == "207" ]]; then ok "Login works; /zotero/ is listable"; else bad "Login/listing failed (HTTP $code). Wrong password?"; fi
+  code="$(printf 'zwd %s' "$$" | c -o /dev/null -w '%{http_code}' -T - "$probe")"
+  if [[ "$code" =~ ^20[0-9]$ ]]; then ok "Write test file"; else bad "Write failed (HTTP $code)"; fi
+  body="$(c "$probe")"
+  if [[ "$body" == "zwd $$" ]]; then ok "Read test file back"; else bad "Read back mismatch"; fi
+  code="$(c -o /dev/null -w '%{http_code}' -X DELETE "$probe")"
+  if [[ "$code" =~ ^20[0-9]$ ]]; then ok "Delete test file"; else bad "Delete failed (HTTP $code)"; fi
+fi
+
+if [[ -d "$DATA_DIR/zotero" ]]; then
+  n="$(find "$DATA_DIR/zotero" -name '*.zip' | wc -l | tr -d ' ')"
+  sz="$(du -sh "$DATA_DIR/zotero" 2>/dev/null | cut -f1)"
+  ok "Data folder $DATA_DIR/zotero: $n attachments, $sz"
+else
+  bad "Data folder $DATA_DIR/zotero missing"
+fi
+
+if [[ -n "$BACKUP_DEST" ]]; then
+  if [[ -f "$ZWD_CONFIG_DIR/last-backup.txt" ]]; then
+    last="$(cat "$ZWD_CONFIG_DIR/last-backup.txt")"
+    if is_macos; then stale="$(date -v-2d '+%Y-%m-%d')"; else stale="$(date -d '2 days ago' '+%Y-%m-%d')"; fi
+    if [[ "$last" != *OK ]]; then
+      bad "Last backup: $last"
+    elif [[ "${last:0:10}" < "$stale" ]]; then
+      bad "Last successful backup is over 2 days old: $last (see $ZWD_LOG_DIR/backup.log)"
+    else
+      ok "Last backup: $last"
+    fi
+  else
+    printf '  - No backup has run yet (run zwd-backup to start one now)\n'
+  fi
+fi
+
+exit "$fail"

@@ -7,7 +7,7 @@ Do this on every device that uses your library. The settings are per device, not
 1. Open **Settings → Sync**. Make sure you are signed in to your Zotero account under **Data Syncing**; library data still syncs through zotero.org.
 2. Under **File Syncing**, tick **Sync attachment files in My Library using** and choose **WebDAV**.
 3. Fill in:
-   - **URL**: pick the scheme from the drop-down (`http` or `https`), then type the host and port, e.g. `mac-mini.local:8080`. Don't add `/zotero/`; Zotero adds it and shows it after the box.
+   - **URL**: pick the scheme from the drop-down (`http` or `https`), then type the host and port, e.g. `mac-mini.local:8080` or `zotero.local:8080`. Don't add `/zotero/`; Zotero adds it and shows it after the box.
    - **Username** and **Password**: the ones you chose in `install.sh` or `zwd-set-password`.
 4. Click **Verify Server**. You should see "File sync is successfully set up".
 5. Choose **Download files**: *at sync time* keeps a full copy on the device, *as needed* fetches each file when you open it. On a laptop with space, *at sync time* is the safer choice: every full copy is another backup.

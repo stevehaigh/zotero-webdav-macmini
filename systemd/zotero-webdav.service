@@ -1,0 +1,27 @@
+# Zotero WebDAV server (rclone). install.sh fills in the __PLACEHOLDERS__ and
+# installs this to /etc/systemd/system/. It runs as your user, not root.
+[Unit]
+Description=Zotero WebDAV server (rclone)
+Documentation=https://github.com/stevehaigh/zotero-webdav-macmini
+Wants=network-online.target
+# local-fs.target: start after the drives in /etc/fstab have been mounted (or given up on).
+After=network-online.target local-fs.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=__GROUP__
+Environment=HOME=__HOME__
+ExecStart=/bin/bash __PREFIX__/bin/zwd-serve
+# If the data drive is missing, zwd-serve exits with an error; systemd retries
+# every 15 s, so the server comes up by itself once the drive is mounted.
+Restart=on-failure
+RestartSec=15
+
+# Light hardening: the server only needs to write to your home and data folders.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

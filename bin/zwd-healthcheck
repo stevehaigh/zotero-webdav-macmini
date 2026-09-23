@@ -39,6 +39,25 @@ if is_macos; then
   elif [[ -n "$BACKUP_DEST" ]]; then
     bad "Backup LaunchAgent not loaded (it only loads while you are logged in)"
   fi
+elif is_linux && command -v systemctl >/dev/null 2>&1; then
+  if systemctl is-active --quiet "$ZWD_SERVER_UNIT"; then
+    ok "Server service running ($ZWD_SERVER_UNIT)"
+  else
+    bad "Server service not running. Try: sudo systemctl status $ZWD_SERVER_UNIT"
+  fi
+  if systemctl is-enabled --quiet "$ZWD_BACKUP_TIMER" 2>/dev/null; then
+    ok "Backup timer enabled ($ZWD_BACKUP_TIMER)"
+  elif [[ -n "$BACKUP_DEST" ]]; then
+    bad "Backup timer not enabled. Re-run install.sh."
+  fi
+fi
+
+if [[ -n "$REQUIRE_MOUNTPOINT" ]]; then
+  if is_mounted "$REQUIRE_MOUNTPOINT"; then
+    ok "Data drive mounted at $REQUIRE_MOUNTPOINT ($(df -Ph "$REQUIRE_MOUNTPOINT" | awk 'NR==2{print $4}') free)"
+  else
+    bad "Data drive $REQUIRE_MOUNTPOINT is NOT mounted; the server will refuse to start"
+  fi
 fi
 
 # An unauthenticated PROPFIND should get 401: proves the server is up and auth is on.
@@ -87,7 +106,7 @@ if [[ -n "$BACKUP_DEST" ]]; then
     if [[ "$last" != *OK ]]; then
       bad "Last backup: $last"
     elif [[ "${last:0:10}" < "$stale" ]]; then
-      bad "Last successful backup is over 2 days old: $last (see $ZWD_LOG_DIR/backup.log)"
+      bad "Last successful backup is over 2 days old: $last (see $(log_hint backup))"
     else
       ok "Last backup: $last"
     fi

@@ -1,0 +1,12 @@
+# Runs zotero-webdav-backup.service daily. Persistent=true catches up on a run
+# missed while the machine was off.
+[Unit]
+Description=Nightly backup of Zotero WebDAV attachments
+
+[Timer]
+OnCalendar=*-*-* __BACKUP_TIME__:00
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

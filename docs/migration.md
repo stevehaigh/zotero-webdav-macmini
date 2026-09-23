@@ -20,9 +20,9 @@ Quit Zotero and copy the whole data directory (the folder containing `zotero.sql
 
 ## 4. Switch to WebDAV
 
-1. Install the server on the Mac Mini (`./install.sh`) and run `zwd-healthcheck --auth` there.
+1. Install the server (`./install.sh`; see the README, or [raspberry-pi.md](raspberry-pi.md) for a Pi) and run `zwd-healthcheck --auth` there.
 2. In Zotero on the migration computer, set File Syncing to **WebDAV** with your server details, click **Verify Server**, then sync.
-3. Zotero now uploads every attachment. Watch the count grow on the Mac Mini:
+3. Zotero now uploads every attachment. Watch the count grow on the server:
    ```bash
    zwd-healthcheck      # shows "N attachments" in the data folder
    ```
@@ -30,11 +30,11 @@ Quit Zotero and copy the whole data directory (the folder containing `zotero.sql
 
 ## 5. Switch your other devices
 
-On each other computer and on the iOS app, change File Syncing to WebDAV with the same details and sync. They will download from the Mac Mini as needed.
+On each other computer and on the iOS app, change File Syncing to WebDAV with the same details and sync. They will download from your server as needed.
 
 ## 6. Run the first backup
 
-On the Mac Mini, run `zwd-backup` once by hand rather than waiting for 03:30, then check that `Backups/ZoteroDAV/current/zotero/` appears in OneDrive.
+On the server, run `zwd-backup` once by hand rather than waiting for 03:30, then check that `Backups/ZoteroDAV/current/zotero/` appears in OneDrive.
 
 ## 7. Let the subscription lapse
 

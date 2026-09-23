@@ -7,13 +7,14 @@
 #   last-backup.txt                 timestamp and result of the last run
 #
 # Version folders older than BACKUP_KEEP_DAYS are pruned.
-# launchd runs this nightly via the io.github.stevehaigh.zotero-webdav-backup LaunchAgent.
+# Runs nightly: a LaunchAgent on macOS, a systemd timer on Linux.
 set -euo pipefail
 # shellcheck source=../lib/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
 load_config
 
 [[ -n "$BACKUP_DEST" ]] || { log "BACKUP_DEST is empty; backup disabled."; exit 0; }
+require_data_mount
 [[ -d "$DATA_DIR/zotero" ]] || die "Nothing to back up: $DATA_DIR/zotero does not exist."
 
 # For a local path, the cloud folder it lives in must already exist. We create
@@ -27,6 +28,11 @@ if [[ "$BACKUP_DEST" == /* ]]; then
   fi
   [[ -d "$root" ]] || die "Backup location $root does not exist. Is OneDrive running and signed in?"
   mkdir -p "$BACKUP_DEST"
+else
+  # An rclone remote such as "onedrive:Backups/ZoteroDAV": the remote must be configured.
+  remote="${BACKUP_DEST%%:*}:"
+  "$RCLONE_BIN" listremotes 2>/dev/null | grep -qxF "$remote" \
+    || die "rclone remote '$remote' is not configured. Set it up with 'rclone config' (see docs/backup.md)."
 fi
 
 stamp="$(date '+%Y-%m-%d_%H%M%S')"

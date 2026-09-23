@@ -1,0 +1,15 @@
+# Nightly backup of the Zotero WebDAV folder, started by zotero-webdav-backup.timer.
+[Unit]
+Description=Back up Zotero WebDAV attachments
+Documentation=https://github.com/stevehaigh/zotero-webdav-macmini
+Wants=network-online.target
+After=network-online.target local-fs.target
+
+[Service]
+Type=oneshot
+User=__USER__
+Group=__GROUP__
+Environment=HOME=__HOME__
+ExecStart=/bin/bash __PREFIX__/bin/zwd-backup
+Nice=10
+IOSchedulingClass=idle
